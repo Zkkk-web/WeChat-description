@@ -1,0 +1,14 @@
+{
+  "name": "headhunter-agent-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal backend for a cloud headhunter agent.",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

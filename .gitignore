@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+!.env.example
+coverage/
+dist/
+logs/
+*.log
+
+# Local artifacts from Feishu minutes reads.
+minutes/
+.codex-tmp/

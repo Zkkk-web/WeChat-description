@@ -6,9 +6,16 @@
   "description": "Minimal backend for a cloud headhunter agent.",
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test"
+    "mail:doctor": "node scripts/mailDoctor.js",
+    "wechat:listen": "node scripts/wechatIntelEventBridge.js",
+    "wechat:doctor": "node scripts/wechatArticleDoctor.js",
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "imapflow": "^1.4.2",
+    "mailparser": "^3.9.12"
   }
 }

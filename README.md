@@ -1,56 +1,148 @@
 # Headhunter Agent Backend
 
-云端猎头助手的最小后端骨架。第一阶段只证明三件事：服务能长期运行、健康检查能被平台探测、外部事件能进入系统。
+猎头助手后端原型。当前重点是验证外部事件进入系统后，能否稳定补处理并把结果推回飞书。
 
-## Milestone
+## 当前已跑通
 
-- `GET /health`: 验证服务在线。
-- `POST /webhook`: 接收邮件或平台事件，返回标准化结果。
-
-## Quick Start
-
-```bash
-node src/server.js
-```
-
-默认端口是 `3000`，可通过 `PORT` 修改。
-
-```bash
-PORT=8787 node src/server.js
-```
-
-## Test
-
-```bash
-node --test
-```
-
-## Railway Deploy
-
-Railway 会读取 `railway.json`，使用 Nixpacks 构建，并用 `npm start` 启动服务。
-
-部署时确认这几项：
-
-1. GitHub 仓库选择 `Zkkk-web/headhunter-agent-backend`。
-2. Start Command 使用 `npm start`。
-3. Healthcheck Path 使用 `/health`。
-4. 环境变量先保留 `.env.example` 里的占位项，等接入飞书、邮箱、模型时再填真实密钥。
-
-部署成功后访问：
+公众号文章更新推送链路已经跑通：
 
 ```text
-https://你的-railway-域名/health
+微信公众号后台登录态
+  -> wechat-download-api 抓取文章
+  -> 本地 feed API
+  -> 本后端轮询 / 补处理
+  -> 飞书话题群
 ```
 
-看到 `ok: true` 就算里程碑 2 的公网运行节点通过。
+已验证结果：
 
-## Environment
+- `wechat-download-api` 健康检查返回 `healthy`。
+- 老板公众号后台登录成功，订阅数为 `1`。
+- 真实公众号文章入库 `10` 篇。
+- 首次补处理只记录水位，不推历史旧文：`checked=10, pushed=0, skippedInitial=10`。
+- 演示推送成功：`checked=1, pushed=1`。
+- 飞书话题群能搜索到推送消息。
+- 多公众号已验证：`泛函` + `宝玉AI` 两个 fakeid 可独立记录水位。
+- 登录态可观测：一键体检会显示剩余有效期，例如 `expires in 3.6d`。
 
-复制 `.env.example` 后按部署平台配置环境变量。当前版本不读取密钥，只保留后续接入飞书、邮箱和模型的配置位。
+## 启动
 
-## Next
+先启动 `wechat-download-api`，并扫码登录公众号后台：
 
-1. 在 Railway 上部署，并验证公网 `/health`。
-2. 用测试邮件或事件订阅调用 `/webhook`。
-3. 接入飞书 Base 写入。
-4. 接入模型抽取候选人信息。
+```powershell
+cd .codex-tmp\wechat-download-api
+.\.venv312\Scripts\python.exe app.py
+```
+
+登录页：
+
+```text
+http://127.0.0.1:5000/login.html
+```
+
+再启动本后端：
+
+```powershell
+$env:WECHAT_ARTICLE_POLL_ENABLED='true'
+$env:WECHAT_DOWNLOAD_API_BASE='http://127.0.0.1:5000'
+$env:WECHAT_ARTICLE_FAKEIDS='Mzg4NjQ5Njg4Nw=='
+$env:WECHAT_ARTICLE_ACCOUNT_NAMES='Mzg4NjQ5Njg4Nw==:泛函'
+$env:FEISHU_ARTICLE_CHAT_ID='oc_f2855eaf4fd887a966e0bbdb18425012'
+$env:WECHAT_ARTICLE_STATE_PATH='.codex-tmp/wechat-article-push-state.json'
+$env:WECHAT_PUSH_EXISTING_ON_FIRST_RUN='false'
+npm start
+```
+
+健康检查：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:3000/health
+```
+
+## 手动补处理
+
+用于演示和兜底。它会立刻检查公众号文章源，并根据本地水位只推新文章：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:3000/wechat/articles/poll
+```
+
+## 一键体检
+
+只检查服务状态，不触发推送：
+
+```powershell
+$env:WECHAT_DOWNLOAD_API_BASE='http://127.0.0.1:5000'
+$env:WECHAT_ARTICLE_FAKEIDS='Mzg4NjQ5Njg4Nw=='
+$env:BACKEND_BASE='http://127.0.0.1:3000'
+npm run wechat:doctor
+```
+
+检查状态并触发一次补处理：
+
+```powershell
+$env:WECHAT_DOCTOR_RUN_POLL='true'
+npm run wechat:doctor
+```
+
+期望看到类似输出：
+
+```text
+wechat health: healthy FastAPI
+wechat login: logged in as 泛函
+wechat subscriptions: subscriptions=1
+wechat feed: articles=3 next_since=1782293034
+backend health: healthy
+backend compensation poll: checked=0 pushed=0 skippedInitial=0
+```
+
+首次运行默认不推旧文章，只记录水位。只有显式设置：
+
+```powershell
+$env:WECHAT_PUSH_EXISTING_ON_FIRST_RUN='true'
+```
+
+才会把历史文章当作待推送内容。
+
+## 关键配置
+
+```env
+WECHAT_ARTICLE_POLL_ENABLED=true
+WECHAT_DOWNLOAD_API_BASE=http://127.0.0.1:5000
+WECHAT_ARTICLE_FAKEIDS=Mzg4NjQ5Njg4Nw==
+WECHAT_ARTICLE_ACCOUNT_NAMES=Mzg4NjQ5Njg4Nw==:泛函
+WECHAT_ARTICLE_POLL_INTERVAL_MS=300000
+WECHAT_ARTICLE_STATE_PATH=.codex-tmp/wechat-article-push-state.json
+WECHAT_PUSH_EXISTING_ON_FIRST_RUN=false
+FEISHU_ARTICLE_CHAT_ID=oc_f2855eaf4fd887a966e0bbdb18425012
+```
+
+多公众号用逗号分隔：
+
+```env
+WECHAT_ARTICLE_FAKEIDS=Mzg4NjQ5Njg4Nw==,Mzk1NzgxMjQ0OA==
+WECHAT_ARTICLE_ACCOUNT_NAMES=Mzg4NjQ5Njg4Nw==:泛函,Mzk1NzgxMjQ0OA==:宝玉AI
+```
+
+## 测试
+
+```powershell
+npm test
+```
+
+当前测试覆盖：
+
+- 读取 `wechat-download-api` feed。
+- 首次运行不刷历史文章。
+- 已初始化后只推新文章。
+- 多公众号独立水位。
+- 重复文章去重。
+- 飞书 webhook 和飞书 chat ID 两种推送方式。
+- Windows 下绕开 `lark-cli.cmd` 多行中文参数拆坏问题。
+- 一键体检可检查抓取服务、登录态、订阅数、feed、后端健康和补处理结果。
+
+## 已知边界
+
+- `wechat-download-api` 登录态约 4 天过期；当前已能体检显示剩余时间，后续可升级为主动飞书提醒。
+- 当前是本地运行，关机或进程退出后不会自动处理；但 state 文件会保留水位，重启后不会重复推旧文章。
+- 如果公众号抓取服务或飞书推送失败，本后端不会推进水位，避免丢文章。

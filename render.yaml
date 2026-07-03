@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: wechat-public-account-pusher
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: WECHAT_ARTICLE_POLL_ENABLED
+        value: "true"
+      - key: WECHAT_ARTICLE_POLL_ON_START
+        value: "true"
+      - key: WECHAT_ARTICLE_DYNAMIC_SUBSCRIPTIONS
+        value: "true"
+      - key: WECHAT_PUSH_EXISTING_ON_FIRST_RUN
+        value: "false"
+      - key: WECHAT_ARTICLE_POLL_INTERVAL_MS
+        value: "300000"

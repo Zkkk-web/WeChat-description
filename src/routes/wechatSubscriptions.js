@@ -187,9 +187,17 @@ function accountCardElements(account, withDivider) {
 }
 
 function accountSummary(account) {
-  const lines = [`**${escapeMarkdown(account.nickname || account.fakeid || "Unknown")}**`];
+  const lines = [`**${escapeMarkdown(account.nickname || "未命名公众号")}**`];
   if (account.alias) lines.push(`微信号：${escapeMarkdown(account.alias)}`);
+  lines.push(`识别码：${escapeMarkdown(shortFakeid(account.fakeid))}`);
   return lines.join("\n");
+}
+
+function shortFakeid(fakeid) {
+  const value = String(fakeid ?? "").trim();
+  if (!value) return "未知";
+  if (value.length <= 10) return value;
+  return `...${value.slice(-8)}`;
 }
 
 function subscriptionButtonValue(account) {

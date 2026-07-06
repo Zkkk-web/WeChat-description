@@ -587,6 +587,8 @@ test("POST /wechat/subscriptions/search returns a selectable card with candidate
     assert.equal(firstButton.text.content, "订阅");
     assert.equal(firstButton.value.fakeid, "fakeid-a");
     assert.doesNotMatch(JSON.stringify(body.card), /Avatar/);
+    assert.match(JSON.stringify(body.card), /微信号/);
+    assert.match(JSON.stringify(body.card), /识别码/);
     assert.doesNotMatch(JSON.stringify(body.card), /FakeID/);
   } finally {
     await new Promise((resolve) => server.close(resolve));

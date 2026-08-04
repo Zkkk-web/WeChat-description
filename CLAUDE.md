@@ -136,3 +136,32 @@ is only a development shortcut and must not be the production dependency.
 │   └── wechat-download-api/   # Vendored WeChat RSS service required by Docker build
 └── src/                       # Existing backend and article poller
 ```
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default five-role triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use the single-context domain documentation layout. See `docs/agents/domain.md`.
+
+## 2026-07-12 Agent skill configuration
+
+```text
+docs/agents/
+├── issue-tracker.md   # GitHub Issues operations and request-surface boundary
+├── triage-labels.md   # Canonical triage roles mapped to repository labels
+└── domain.md          # Domain context and ADR consumption rules
+```
+
+The agent configuration is repository-local and declarative. Skills read these files before operating; they do not create remote issues merely because configuration exists. `CONTEXT.md` and ADRs remain lazy artifacts created only when domain decisions need to be recorded.
+
+### Change log
+
+- 2026-07-12: Configured Matt Pocock's engineering skills for GitHub Issues, default triage labels, and a single-context domain documentation layout.

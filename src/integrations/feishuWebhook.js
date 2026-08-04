@@ -35,7 +35,10 @@ export function buildArticlePushText(article, config = {}) {
     cleanAccountName(article.nickname) ||
     article.fakeid ||
     "Unknown account";
-  const fields = config.pushFields?.length ? config.pushFields : ["account", "title", "digest", "link"];
+  const defaultFields = config.aiSummary?.enabled
+    ? ["account", "title", "digest", "summary", "link"]
+    : ["account", "title", "digest", "link"];
+  const fields = config.pushFields?.length ? config.pushFields : defaultFields;
   const lines = fields.map((field) => articlePushLine(field, { article, account, prefix }));
   return lines.filter(Boolean).join("\n");
 }
@@ -44,6 +47,7 @@ function articlePushLine(field, { article, account, prefix }) {
   if (field === "account") return `[${prefix}] ${account}`;
   if (field === "title" && article.title) return `Title: ${article.title}`;
   if (field === "digest" && article.digest) return `Digest: ${article.digest}`;
+  if (field === "summary" && article.aiSummary) return `Summary:\n${article.aiSummary}`;
   if (field === "author" && article.author) return `Author: ${article.author}`;
   if (field === "published" && article.publishTime) return `Published: ${formatPublishTime(article.publishTime)}`;
   if (field === "link" && article.link) return `Link: ${article.link}`;

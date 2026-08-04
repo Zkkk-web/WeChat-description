@@ -84,6 +84,7 @@ export function normalizeSubscription(input) {
     fakeid: input.fakeid ?? "",
     nickname: input.nickname ?? "",
     alias: input.alias ?? "",
+    description: input.description ?? input.signature ?? input.desc ?? input.introduction ?? "",
     headImg: input.head_img ?? "",
   };
 }
@@ -93,6 +94,7 @@ export function normalizeSearchAccount(input) {
     fakeid: input.fakeid ?? "",
     nickname: input.nickname ?? "",
     alias: input.alias ?? "",
+    description: input.description ?? input.signature ?? input.desc ?? input.introduction ?? "",
     headImg: input.round_head_img ?? input.head_img ?? "",
   };
 }
@@ -108,6 +110,8 @@ export function normalizeArticle(input) {
     publishTime: numberOr(input.publish_time, 0),
     link: input.link ?? "",
     cover: input.cover ?? "",
+    content: input.content ?? "",
+    plainContent: input.plain_content ?? input.plainContent ?? "",
     contentFetched: Boolean(input.content_fetched),
   };
 }

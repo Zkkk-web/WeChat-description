@@ -47,7 +47,7 @@ $env:WECHAT_ARTICLE_POLL_ENABLED='true'
 $env:WECHAT_DOWNLOAD_API_BASE='http://127.0.0.1:5000'
 $env:WECHAT_ARTICLE_FAKEIDS='Mzg4NjQ5Njg4Nw=='
 $env:WECHAT_ARTICLE_ACCOUNT_NAMES='Mzg4NjQ5Njg4Nw==:泛函'
-$env:FEISHU_ARTICLE_CHAT_ID='oc_f2855eaf4fd887a966e0bbdb18425012'
+$env:FEISHU_ARTICLE_CHAT_ID='oc_85d747806e696642d420426a3a596ab3'
 $env:WECHAT_ARTICLE_STATE_PATH='.codex-tmp/wechat-article-push-state.json'
 $env:WECHAT_PUSH_EXISTING_ON_FIRST_RUN='false'
 npm start
@@ -114,7 +114,7 @@ WECHAT_ARTICLE_ACCOUNT_NAMES=Mzg4NjQ5Njg4Nw==:泛函
 WECHAT_ARTICLE_POLL_INTERVAL_MS=300000
 WECHAT_ARTICLE_STATE_PATH=.codex-tmp/wechat-article-push-state.json
 WECHAT_PUSH_EXISTING_ON_FIRST_RUN=false
-FEISHU_ARTICLE_CHAT_ID=oc_f2855eaf4fd887a966e0bbdb18425012
+FEISHU_ARTICLE_CHAT_ID=oc_85d747806e696642d420426a3a596ab3
 ```
 
 多公众号用逗号分隔：
@@ -123,6 +123,24 @@ FEISHU_ARTICLE_CHAT_ID=oc_f2855eaf4fd887a966e0bbdb18425012
 WECHAT_ARTICLE_FAKEIDS=Mzg4NjQ5Njg4Nw==,Mzk1NzgxMjQ0OA==
 WECHAT_ARTICLE_ACCOUNT_NAMES=Mzg4NjQ5Njg4Nw==:泛函,Mzk1NzgxMjQ0OA==:宝玉AI
 ```
+
+## 智能体直接订阅管理
+
+目标智能体必须直接调用 `POST /agent/wechat-subscriptions`，不能等待另一个机器人代为执行或返回回执。接口支持：
+
+```text
+list
+search
+add
+remove
+```
+
+- 请求必须携带 `Authorization: Bearer <token>`，令牌从 `WECHAT_AGENT_API_TOKEN` 读取；未配置时接口直接拒绝服务。
+- 接口固定使用 `FEISHU_ARTICLE_CHAT_ID` 对应的唯一推送群，并拒绝其他群。
+- 新增前先调用 `search`，由用户确认候选项后再把候选项的 `fakeid` 传给 `add`。
+- 取消只接受公众号名称、微信号或内部识别码的精确匹配。
+- 智能体只能在收到 `ok: true` 的真实接口结果后确认操作完成。
+- 该接口只解决订阅操作；文章要以目标智能体身份推送，还必须配置该智能体自己的飞书 App 凭据。
 
 ## 测试
 
@@ -138,6 +156,7 @@ npm test
 - 多公众号独立水位。
 - 重复文章去重。
 - 飞书 webhook 和飞书 chat ID 两种推送方式。
+- 飞书群内查询、新增、精确取消以及单群限制。
 - Windows 下绕开 `lark-cli.cmd` 多行中文参数拆坏问题。
 - 一键体检可检查抓取服务、登录态、订阅数、feed、后端健康和补处理结果。
 

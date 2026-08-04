@@ -5,11 +5,12 @@
   "type": "module",
   "description": "Minimal backend for a cloud headhunter agent.",
   "scripts": {
-    "start": "node src/server.js",
-    "mail:doctor": "node scripts/mailDoctor.js",
-    "wechat:listen": "node scripts/wechatIntelEventBridge.js",
-    "wechat:doctor": "node scripts/wechatArticleDoctor.js",
-    "test": "node --test test/*.test.js"
+    "start": "\"C:\\Users\\朱大纯\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe\" src/server.js",
+    "mail:doctor": "\"C:\\Users\\朱大纯\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe\" scripts/mailDoctor.js",
+    "wechat:listen": "\"C:\\Users\\朱大纯\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe\" scripts/wechatIntelEventBridge.js",
+    "wechat:doctor": "\"C:\\Users\\朱大纯\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe\" scripts/wechatArticleDoctor.js",
+    "wechat:watchdog": "\"C:\\Users\\朱大纯\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe\" scripts/wechatArticleWatchdog.js",
+    "test": "\"C:\\Users\\朱大纯\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe\" --test test/*.test.js"
   },
   "engines": {
     "node": ">=20"

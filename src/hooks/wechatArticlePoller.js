@@ -1,8 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { sendArticlePush } from "../integrations/feishuArticlePush.js";
+import { enrichArticleWithSummary } from "../integrations/articleSummary.js";
 import { buildArticlePushText } from "../integrations/feishuWebhook.js";
 import { fetchWechatArticles, fetchWechatLoginStatus, fetchWechatSubscriptions } from "../integrations/wechatFeed.js";
+import { listWechatSubscriptions } from "../domain/wechatSubscriptionStore.js";
 
 export async function pollWechatArticles(config, deps = {}) {
   const store = deps.stateStore ?? fileStateStore(config.statePath);
@@ -16,6 +18,14 @@ export async function pollWechatArticles(config, deps = {}) {
     ...Object.fromEntries(subscriptions.map((item) => [item.fakeid, item.nickname]).filter(([key, value]) => key && value)),
   };
   const resolvedConfig = { ...config, accountNames };
+
+  if (fakeids.length === 0) {
+    return { checked: 0, pushed: 0, skippedInitial: 0, accounts: [] };
+  }
+
+  if (hasGroupScopedSubscriptions(subscriptions)) {
+    return pollWechatArticleSubscriptions(resolvedConfig, subscriptions, state, store, deps);
+  }
 
   if (fakeids.length > 1) {
     return pollWechatArticleAccounts(resolvedConfig, fakeids, state, store, deps);
@@ -97,6 +107,46 @@ async function pollWechatArticleAccounts(config, fakeids, state, store, deps) {
   };
 }
 
+async function pollWechatArticleSubscriptions(config, subscriptions, state, store, deps) {
+  const nextState = {
+    initialized: true,
+    loginReminderKey: state.loginReminderKey,
+    accounts: { ...(state.accounts ?? {}) },
+  };
+  const results = [];
+
+  for (const item of subscriptions) {
+    const stateKey = subscriptionStateKey(item);
+    const accountStore = {
+      async load() {
+        return nextState.accounts[stateKey] ?? {};
+      },
+      async save(accountState) {
+        nextState.accounts[stateKey] = trimState(accountState);
+        await store.save(trimAccountsState(nextState));
+      },
+    };
+    const result = await pollWechatArticleAccount(
+      {
+        ...config,
+        fakeid: item.fakeid,
+        feishuChatId: item.chatId || config.feishuChatId,
+      },
+      nextState.accounts[stateKey] ?? {},
+      accountStore,
+      deps,
+    );
+    results.push({ fakeid: item.fakeid, chatId: item.chatId, ...result });
+  }
+
+  return {
+    checked: results.reduce((sum, item) => sum + item.checked, 0),
+    pushed: results.reduce((sum, item) => sum + item.pushed, 0),
+    skippedInitial: results.reduce((sum, item) => sum + item.skippedInitial, 0),
+    accounts: results,
+  };
+}
+
 async function pollWechatArticleAccount(config, initialState, store, deps) {
   const state = initialState ?? (await store.load());
   const firstRun = !state.initialized;
@@ -130,7 +180,8 @@ async function pollWechatArticleAccount(config, initialState, store, deps) {
     nextSince = Math.max(nextSince, article.publishTime);
     if (pushed.has(key)) continue;
 
-    const text = buildArticlePushText(article, config);
+    const enrichedArticle = await safeEnrichArticleWithSummary(article, config, deps);
+    const text = buildArticlePushText(enrichedArticle, config);
     await sendArticlePush(config, text, { execFile: deps.execFile, fetch: deps.fetch });
     pushed.add(key);
     pushedArticles.push(article);
@@ -149,6 +200,15 @@ async function pollWechatArticleAccount(config, initialState, store, deps) {
     since: nextSince,
     articles: pushedArticles,
   };
+}
+
+async function safeEnrichArticleWithSummary(article, config, deps) {
+  try {
+    return await enrichArticleWithSummary(article, config, deps);
+  } catch (error) {
+    console.warn("wechat article summary failed; pushing original article", error);
+    return article;
+  }
 }
 
 export function startWechatArticlePoller(config, deps = {}) {
@@ -246,6 +306,12 @@ function accountFakeids(config) {
 
 async function resolveWechatSubscriptions(config, deps = {}) {
   const configuredFakeids = accountFakeids(config).filter(Boolean);
+  if (config.useLocalSubscriptions !== false) {
+    const localSubscriptions = await listWechatSubscriptions(config, deps);
+    if (localSubscriptions.length > 0) return uniqueSubscriptions(localSubscriptions);
+    if (config.allowUpstreamSubscriptionFallback !== true && configuredFakeids.length === 0) return [];
+  }
+
   if (configuredFakeids.length > 0 && config.useDynamicSubscriptions !== true) {
     return configuredFakeids.map((fakeid) => ({
       fakeid,
@@ -265,10 +331,19 @@ async function resolveWechatSubscriptions(config, deps = {}) {
 function uniqueSubscriptions(subscriptions) {
   const seen = new Set();
   return subscriptions.filter((item) => {
-    if (!item.fakeid || seen.has(item.fakeid)) return false;
-    seen.add(item.fakeid);
+    const key = item.chatId ? `${item.chatId}:${item.fakeid}` : item.fakeid;
+    if (!item.fakeid || seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
+}
+
+function hasGroupScopedSubscriptions(subscriptions) {
+  return subscriptions.some((item) => item.chatId);
+}
+
+function subscriptionStateKey(subscription) {
+  return subscription.chatId ? `${subscription.chatId}:${subscription.fakeid}` : subscription.fakeid;
 }
 
 function hasPushTarget(config) {

@@ -8,8 +8,11 @@ import { startWechatArticlePoller } from "./hooks/wechatArticlePoller.js";
 import { mailEventExists } from "./integrations/larkBase.js";
 import { webhookRoute } from "./routes/webhook.js";
 import { wechatArticlesRoute } from "./routes/wechatArticles.js";
+import { wechatAgentRoute } from "./routes/wechatAgent.js";
 import {
+  wechatSubscriptionDeleteRoute,
   wechatSubscriptionConfirmRoute,
+  wechatSubscriptionListRoute,
   wechatSubscriptionSearchRoute,
   wechatSubscriptionsRoute,
 } from "./routes/wechatSubscriptions.js";
@@ -21,9 +24,12 @@ export function buildApp(config = {}) {
     healthRoute(),
     webhookRoute(config),
     wechatArticlesRoute(config),
+    wechatAgentRoute(config),
+    wechatSubscriptionListRoute(config),
     wechatSubscriptionsRoute(config),
     wechatSubscriptionSearchRoute(config),
     wechatSubscriptionConfirmRoute(config),
+    wechatSubscriptionDeleteRoute(config),
   ]);
 }
 

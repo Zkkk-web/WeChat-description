@@ -231,15 +231,16 @@ function resolveCliInvocation(command, args) {
     return { command, args };
   }
 
-  if (command.toLowerCase().endsWith(".cmd") || command.toLowerCase().endsWith(".bat")) {
+  const lowerCommand = command.toLowerCase();
+  if (lowerCommand.endsWith(".cmd") || lowerCommand.endsWith(".bat")) {
     const npmBin = process.env.APPDATA ? join(process.env.APPDATA, "npm") : "";
     const cliEntry = npmBin ? join(npmBin, "node_modules", "@larksuite", "cli", "scripts", "run.js") : "";
 
-    if (command.toLowerCase() === "lark-cli.cmd" && existsSync(cliEntry)) {
-      return { command: "node", args: [cliEntry, ...args] };
+    if (lowerCommand === "lark-cli.cmd" && existsSync(cliEntry)) {
+      return { command: process.execPath, args: [cliEntry, ...args] };
     }
 
-    return { command, args };
+    return { command: "cmd.exe", args: ["/d", "/s", "/c", command, ...args] };
   }
 
   return { command, args };

@@ -465,7 +465,113 @@ test("POST /webhook handles flat Feishu message events with natural subscription
   }
 });
 
+test("POST /webhook lists subscriptions from the current Feishu group", async () => {
+  const execCalls = [];
+  const subscriptionStore = memorySubscriptionStore({
+    version: 1,
+    groups: {
+      oc_live: {
+        accounts: {
+          "fakeid-fanhan": { fakeid: "fakeid-fanhan", nickname: "泛函", chatId: "oc_live" },
+          "fakeid-agent": { fakeid: "fakeid-agent", nickname: "Agent", chatId: "oc_live" },
+        },
+      },
+      oc_other: {
+        accounts: {
+          "fakeid-other": { fakeid: "fakeid-other", nickname: "其他群公众号", chatId: "oc_other" },
+        },
+      },
+    },
+  });
+  const app = buildApp({
+    wechatArticles: {
+      enabled: true,
+      feishuChatId: "oc_live",
+      subscriptionStore,
+      larkCliCommand: "lark-cli",
+      larkCliAs: "bot",
+    },
+    execFile: captureLarkMessages(execCalls),
+  });
+
+  await new Promise((resolve) => app.listen(0, resolve));
+  const address = app.address();
+
+  try {
+    const { response, body } = await postWechatMessage(address.port, "oc_live", "@艾伦 查看公众号订阅");
+
+    assert.equal(response.status, 200);
+    assert.equal(body.ok, true);
+    assert.equal(body.type, "wechat_subscription_list");
+    assert.equal(body.subscriptionsCount, 2);
+    assert.equal(execCalls.length, 1);
+    assert.match(execCalls[0].args.join(" "), /泛函/);
+    assert.match(execCalls[0].args.join(" "), /Agent/);
+    assert.doesNotMatch(execCalls[0].args.join(" "), /其他群公众号/);
+  } finally {
+    await new Promise((resolve) => app.close(resolve));
+  }
+});
+
+test("POST /webhook removes an exact subscription instead of treating it as an add command", async () => {
+  const execCalls = [];
+  const subscriptionStore = memorySubscriptionStore({
+    version: 1,
+    groups: {
+      oc_live: {
+        accounts: {
+          "fakeid-geekpark": { fakeid: "fakeid-geekpark", nickname: "极客公园", chatId: "oc_live" },
+          "fakeid-fanhan": { fakeid: "fakeid-fanhan", nickname: "泛函", chatId: "oc_live" },
+        },
+      },
+    },
+  });
+  const app = buildApp({
+    fetch: async () => {
+      throw new Error("remove must not call the upstream account search");
+    },
+    wechatArticles: {
+      enabled: true,
+      feishuChatId: "oc_live",
+      subscriptionStore,
+      larkCliCommand: "lark-cli",
+      larkCliAs: "bot",
+    },
+    execFile: captureLarkMessages(execCalls),
+  });
+
+  await new Promise((resolve) => app.listen(0, resolve));
+  const address = app.address();
+
+  try {
+    const { response, body } = await postWechatMessage(address.port, "oc_live", "@艾伦 取消订阅公众号 极客公园");
+    const state = await subscriptionStore.load();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.ok, true);
+    assert.equal(body.type, "wechat_subscription_remove");
+    assert.equal(body.removed, 1);
+    assert.equal(body.subscriptionsCount, 1);
+    assert.equal(state.groups.oc_live.accounts["fakeid-geekpark"], undefined);
+    assert.equal(state.groups.oc_live.accounts["fakeid-fanhan"].nickname, "泛函");
+    assert.equal(execCalls.length, 1);
+    assert.match(execCalls[0].args.join(" "), /已取消公众号「极客公园」的推送/);
+  } finally {
+    await new Promise((resolve) => app.close(resolve));
+  }
+});
+
 test("POST /webhook confirms a WeChat subscription card action", async () => {
+  let subscriptionState = {};
+  const execCalls = [];
+  const subscriptionStore = {
+    async load() {
+      return subscriptionState;
+    },
+    async save(next) {
+      subscriptionState = next;
+    },
+  };
   const app = buildApp({
     fetch: async (url, init) => {
       const value = String(url);
@@ -482,6 +588,13 @@ test("POST /webhook confirms a WeChat subscription card action", async () => {
     wechatArticles: {
       enabled: true,
       apiBase: "http://wechat.test",
+      subscriptionStore,
+      larkCliCommand: "lark-cli",
+      larkCliAs: "bot",
+    },
+    execFile: async (command, args) => {
+      execCalls.push({ command, args });
+      return { stdout: JSON.stringify({ ok: true, message_id: "om_feedback" }) };
     },
   });
 
@@ -504,6 +617,7 @@ test("POST /webhook confirms a WeChat subscription card action", async () => {
               action: "wechat_subscribe",
               fakeid: "fakeid-agent",
               nickname: "Agent",
+              chatId: "oc_test",
             },
           },
         },
@@ -514,7 +628,119 @@ test("POST /webhook confirms a WeChat subscription card action", async () => {
     assert.equal(response.status, 200);
     assert.equal(body.ok, true);
     assert.equal(body.type, "wechat_subscription_confirm");
-    assert.equal(body.toast.content, "Subscribed: Agent");
+    assert.equal(body.localSubscription.chatId, "oc_test");
+    assert.equal(subscriptionState.groups.oc_test.accounts["fakeid-agent"].nickname, "Agent");
+    assert.equal(execCalls.length, 1);
+    assert.deepEqual(execCalls[0].args.slice(0, 4), ["im", "+messages-send", "--chat-id", "oc_test"]);
+    assert.match(execCalls[0].args.join(" "), /已成功订阅公众号「Agent」/);
+    assert.equal(body.toast.content, "Subscribed: Agent. Future articles will be pushed here.");
+  } finally {
+    await new Promise((resolve) => app.close(resolve));
+  }
+});
+
+function memorySubscriptionStore(initialState) {
+  let state = structuredClone(initialState);
+  return {
+    async load() {
+      return structuredClone(state);
+    },
+    async save(next) {
+      state = structuredClone(next);
+    },
+  };
+}
+
+function captureLarkMessages(calls) {
+  return async (command, args) => {
+    calls.push({ command, args });
+    return { stdout: JSON.stringify({ ok: true, message_id: `om_${calls.length}` }) };
+  };
+}
+
+async function postWechatMessage(port, chatId, text) {
+  const response = await fetch(`http://127.0.0.1:${port}/webhook`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      schema: "2.0",
+      header: {
+        event_id: `evt-${Date.now()}`,
+        event_type: "im.message.receive_v1",
+      },
+      event: {
+        message: {
+          chat_id: chatId,
+          content: JSON.stringify({ text }),
+        },
+      },
+    }),
+  });
+  return { response, body: await response.json() };
+}
+
+test("POST /webhook confirms a flat card.action.trigger event", async () => {
+  let subscriptionState = {};
+  const execCalls = [];
+  const subscriptionStore = {
+    async load() {
+      return subscriptionState;
+    },
+    async save(next) {
+      subscriptionState = next;
+    },
+  };
+  const app = buildApp({
+    fetch: async (url, init) => {
+      const value = String(url);
+      if (value === "http://wechat.test/api/rss/subscribe") {
+        const body = JSON.parse(init.body);
+        assert.equal(body.fakeid, "fakeid-flat");
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      throw new Error(`unexpected request: ${value}`);
+    },
+    wechatArticles: {
+      enabled: true,
+      apiBase: "http://wechat.test",
+      subscriptionStore,
+      larkCliCommand: "lark-cli",
+      larkCliAs: "bot",
+    },
+    execFile: async (command, args) => {
+      execCalls.push({ command, args });
+      return { stdout: JSON.stringify({ ok: true, message_id: "om_flat_feedback" }) };
+    },
+  });
+
+  await new Promise((resolve) => app.listen(0, resolve));
+  const address = app.address();
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/webhook`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        type: "card.action.trigger",
+        chat_id: "oc_flat",
+        action_value: JSON.stringify({
+          action: "wechat_subscribe",
+          fakeid: "fakeid-flat",
+          nickname: "Flat Account",
+        }),
+      }),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.ok, true);
+    assert.equal(body.localSubscription.chatId, "oc_flat");
+    assert.equal(subscriptionState.groups.oc_flat.accounts["fakeid-flat"].nickname, "Flat Account");
+    assert.equal(execCalls.length, 1);
+    assert.match(execCalls[0].args.join(" "), /已成功订阅公众号「Flat Account」/);
   } finally {
     await new Promise((resolve) => app.close(resolve));
   }
